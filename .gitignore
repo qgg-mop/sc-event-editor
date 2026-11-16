@@ -1,0 +1,22 @@
+# 遊戲素材（版權屬 Bandai Namco，不可上傳）
+素材/
+劇本/
+資料/style/corpus/
+sc-editor/tts-cache/
+sc-editor/docs/
+sc-editor/saved-project.json
+sc-editor/demo.json
+
+# 金鑰與設定
+agent/llm-config.json
+agent/*.bak
+語音模型/
+tts-keys.json
+agent/_api.log
+agent/_api.err.log
+*.log
+
+# 系統
+Thumbs.db
+desktop.ini
+.DS_Store
