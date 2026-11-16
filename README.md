@@ -25,6 +25,7 @@
 - 風格 Agent API（8090）：翻譯＋語體檢查＋配音，可接任何 OpenAI 相容 LLM
 - 角色語體資料包：29 位角色的官方統計（`資料/style`）
 
+> **素材聲明**：README 截圖中的遊戲背景、角色立繪與對話框屬 ©Bandai Namco Entertainment Inc.，僅作功能示意；本 repo 不含任何遊戲素材檔案。使用者需自備素材，並自負使用責任。
 ## 快速開始
 
 1. 下載或 clone 本 repo
