@@ -3051,6 +3051,8 @@
   // ---------- 播放 ----------
   var TYPING_MS = 120;   // 每個字出現的間隔（毫秒）
 
+  var voiceActive = false;
+
   function finishTalk(pos) {
     var slot = spineStage.slots[pos];
     if (!slot || !slot.talking) { return; }
@@ -3072,7 +3074,7 @@
     slot.talkStopTimer = setTimeout(function () {
       slot.talkStopTimer = null;
       if (spineStage.slots[pos] !== slot) { return; }
-      stopTalk(pos);   // 清掉講話軌，嘴巴回到閉口
+      if (!voiceActive) { stopTalk(pos); }   // 有語音時等音檔結束再閉口
     }, Math.max(60, remainMs) + 20);
   }
 
@@ -4641,9 +4643,80 @@
       status('翻譯失敗（沒有送 TTS）：' + (e.message || e));
     });
   }
+  // 語音＋口型同步：音檔開始才開口，音檔結束立刻閉口
+  function voiceTalkTargets(scene) {
+    var out = [];
+    if (!scene || !scene.chars) { return out; }
+    var sp = (scene.speaker || '').trim();
+    var any = [];
+    POSITIONS.forEach(function (pos) {
+      var c = scene.chars[pos];
+      if (!c || c.kind !== 'spine' || !c.talkAnim) { return; }
+      any.push(pos);
+      if (sp && c.name && (c.name.indexOf(sp) >= 0 || sp.indexOf(c.name) >= 0)) { out.push(pos); }
+    });
+    if (!out.length && any.length === 1) { out = any; }
+    return out;
+  }
+  function voiceTalkStart(scene) {
+    voiceTalkTargets(scene).forEach(function (pos) {
+      var c = scene.chars[pos];
+      if (spineStage.slots[pos] && c && c.talkAnim) { startTalk(pos, c.talkAnim); }
+    });
+  }
+  function voiceTalkStop(scene) {
+    if (!scene || !scene.chars) { return; }
+    POSITIONS.forEach(function (pos) {
+      if (spineStage.slots[pos]) { stopTalk(pos); }
+    });
+  }
+  function closeAllMouth(scene) {
+    voiceActive = false;
+    window.__blockTalkUntil = Date.now() + 1200;
+    POSITIONS.forEach(function (pos) {
+      var sl = spineStage.slots[pos];
+      if (!sl) { return; }
+      try { stopTalk(pos); } catch (e) {}
+      sl.talking = '';
+      // 語音結束 → 強制閉口：表情軌（track 1）的動畫會把嘴巴再次張開，
+      // 所以連表情軌一起清掉，讓嘴巴回到骨架預設的閉口狀態。
+      try { sl.spine.state.clearTrack(1); } catch (e) {}
+      sl.face = '';
+      try { syncFaceSelect(pos, ''); } catch (e) {}
+      try { sl.spine.state.update(0); } catch (e) {}
+      resetMouth(sl);
+      try { sl.spine.state.update(0); } catch (e) {}
+      resetMouth(sl);
+    });
+  }
+  function bindVoiceMouth(a, scene) {
+    if (!a) { return; }
+    if (a.__mouthScene) {
+      a.removeEventListener('playing', a.__mouthOn);
+      a.removeEventListener('ended', a.__mouthOff);
+      a.removeEventListener('pause', a.__mouthOff);
+      a.removeEventListener('error', a.__mouthOff);
+    }
+    a.__mouthScene = scene;
+    a.__mouthOn = function () { voiceActive = true; window.__blockTalkUntil = 0; voiceTalkStart(scene); };
+    a.__mouthOff = function () { closeAllMouth(scene); };
+    a.addEventListener('playing', a.__mouthOn);
+    if (a.__mouthWatch) { clearInterval(a.__mouthWatch); }
+    a.__mouthWatch = setInterval(function () {
+      if (a.ended || a.paused) {
+        closeAllMouth(scene);
+        clearInterval(a.__mouthWatch); a.__mouthWatch = null;
+      }
+    }, 120);
+    a.addEventListener('ended', a.__mouthOff);
+    a.addEventListener('pause', a.__mouthOff);
+    a.addEventListener('error', a.__mouthOff);
+  }
+
   function ttsPlayPreview(src) {
     var a = ttsGetAudio();
     a.src = src;
+    bindVoiceMouth(a, current());
     bgmDuck(true);
     var p = a.play();
     if (p && p['catch']) { p['catch'](function () { bgmDuck(false); }); }
@@ -4656,6 +4729,7 @@
     var s = state.scenes[idx];
     if (s && s.voice && s.voice.src) {
       a.src = s.voice.src;
+      bindVoiceMouth(a, s);
       bgmDuck(true);
       var p = a.play();
       if (p && p['catch']) { p['catch'](function () { bgmDuck(false); }); }
@@ -5047,10 +5121,20 @@
   function resetMouth(slot) {
     try {
       var sk = slot.spine.skeleton;
-      var idx = sk.findSlotIndex('mouth');
-      if (idx < 0) { return; }
-      var s = sk.slots[idx];
-      s.setAttachment(sk.getAttachment(idx, s.data.attachmentName));
+      // 嘴部槽位依骨架不同叫 mouth／mouth_open／mouth_close1…——全部重置回
+      // setup 附件（即閉嘴形），才能對抗 lip 動畫留下的「張嘴」狀態
+      var n = sk.slots.length;
+      for (var i = 0; i < n; i++) {
+        var s2 = sk.slots[i];
+        var dn = s2.data && s2.data.name ? s2.data.name : '';
+        if (!/mouth/i.test(dn)) { continue; }
+        var setupName = s2.data.attachmentName;
+        if (setupName) {
+          s2.setAttachment(sk.getAttachment(i, setupName));
+        } else {
+          s2.setAttachment(null);
+        }
+      }
     } catch (e) {}
   }
 
@@ -5086,6 +5170,7 @@
   function startTalk(pos, animName) {
     var slot = spineStage.slots[pos];
     if (!slot) { return; }
+    if (!voiceActive && window.__blockTalkUntil && Date.now() < window.__blockTalkUntil) { return; }
     var list = talkCandidates(slot);
     if (!list.length) { status('這套骨架沒有嘴巴動畫'); return; }
 
@@ -6089,6 +6174,7 @@
 
   // ---------- 給 Console / 進階使用者用 ----------
   window.__spine = spineStage;
+  spineStage.forceCloseMouth = closeAllMouth;
   window.__official = { build: buildOfficialScript, parse: importOfficial, ready: ensureAll };
 
   // 風格 Agent 設定列

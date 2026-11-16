@@ -71,8 +71,6 @@ def bigrams(s):
     return {s[i:i+2] for i in range(len(s)-1)}
 
 def examples_for(card, q, k=3):
-    if not os.path.exists(MANIFEST):
-        return []
     man = json.load(open(MANIFEST, encoding="utf-8"))
     info = man.get(card["tw"])
     if not info: return []
@@ -126,10 +124,7 @@ def main():
     c = find_card(a.speaker, spec)
     if not c:
         print(json.dumps({"error": "找不到角色：" + a.speaker}, ensure_ascii=False)); sys.exit(1)
-    off = None
-    if os.path.exists(MANIFEST):
-        off = (json.load(open(MANIFEST, encoding="utf-8")).get(c["tw"]) or {}).get("official")
-    out = {"speaker": c["tw"], "official": off,
+    out = {"speaker": c["tw"], "official": (json.load(open(MANIFEST, encoding="utf-8")).get(c["tw"]) or {}).get("official"),
            "style_block": style_block(c), "speech": speech_params(c)}
     if a.text: out["examples"] = [e["text"] for e in examples_for(c, a.text, a.examples)]
     if a.check:

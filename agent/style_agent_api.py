@@ -27,6 +27,7 @@ import struct
 import time
 import urllib.error
 import urllib.request
+from fastapi.responses import JSONResponse
 from pathlib import Path
 from typing import Any
 
@@ -287,8 +288,14 @@ def chat(messages: list[dict], model: str | None = None, temperature: float = 0.
                                  data=json.dumps(body).encode("utf-8"), method="POST")
     req.add_header("Content-Type", "application/json")
     req.add_header("Authorization", "Bearer " + cfg["api_key"])
-    with urllib.request.urlopen(req, timeout=120) as r:
-        data = json.loads(r.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            data = json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", "replace")[:300]
+        raise HTTPException(502, f"LLM 上游錯誤 {e.code}：{body}（模型 {model} 可能不存在）") from e
+    except Exception as e:
+        raise HTTPException(502, f"LLM 連線失敗：{e}") from e
     return (data["choices"][0]["message"].get("content") or "").strip()
 
 
@@ -315,6 +322,12 @@ class LineBody(BaseModel):
     max_rounds: int = MAX_ROUNDS
     save: bool = False
     llm_model: str | None = None
+
+
+@app.exception_handler(Exception)
+async def _any_error(request, exc):
+    return JSONResponse(status_code=500, content={"detail": str(exc)},
+                        headers={"Access-Control-Allow-Origin": "*"})
 
 
 @app.get("/health")
