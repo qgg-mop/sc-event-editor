@@ -21,7 +21,8 @@
 - 轉場：黑場／白場／背景淡入／溶解
 - 純色介面（淺色／深色，跟隨系統）
 - 匯出 JSON（EventViewer 格式）、官方格式匯入／匯出
-- 配音：本機 Irodori TTS（8088）＋風格 Agent API（8090）
+- 配音：**本機語音模型**（Irodori／VOICEVOX／AivisSpeech／GPT-SoVITS）或**雲端語音模型**（ElevenLabs／Azure／自訂 OpenAI 相容）
+- 風格 Agent API（8090）：翻譯＋語體檢查＋配音，可接任何 OpenAI 相容 LLM
 - 角色語體資料包：29 位角色的官方統計（`資料/style`）
 
 ## 快速開始
@@ -34,12 +35,39 @@
 
 ## 配音（可選）
 
-| 服務 | 用途 | 啟動 |
-|---|---|---|
-| 8088 | Irodori TTS（本機模型） | 自備 `python hski_api.py --port 8088` |
-| 8090 | 風格 Agent API（翻譯＋語體檢查＋配音） | `agent\啟動AgentAPI.bat` |
+支援「本地語音模型」與「雲端語音模型」兩條路，可在編輯器左欄「配音 → 管理語音服務」切換。
 
-Agent API 需要 OpenAI 相容的 API key：在 `agent/llm-config.json` 填入 `base_url` / `model` / `api_key`（此檔已被 gitignore）。
+### 本地語音模型
+
+| 引擎 | 預設埠 | 啟動 |
+|---|---|---|
+| **Irodori TTS**（本專案主要使用） | 8088 | `python hski_api.py --port 8088`（自備模型） |
+| VOICEVOX | 50021 | 啟動 VOICEVOX 引擎 |
+| AivisSpeech | 10101 | 啟動 AivisSpeech 引擎 |
+| GPT-SoVITS | 9880 | 啟動 api_v2 |
+| OpenAI 相容（本機 vLLM 等） | 8080／8000 | 自備服務 |
+
+在「管理語音服務」按 **掃描本機** 會自動偵測上述引擎；掃到 Irodori 可直接選模型與聲線，其他引擎會帶入可用的聲線清單。
+
+### 雲端語音模型
+
+| 供應商 | 設定 |
+|---|---|
+| ElevenLabs | API key（Voice ID 自填） |
+| Azure Speech | API key＋區域＋語音名稱（如 `ja-JP-NanamiNeural`） |
+| 自訂 API（OpenAI 相容） | Endpoint＋API key＋model＋voice |
+
+雲端 key 只存在伺服器端 `tts-keys.json`，不會寫進劇本。
+
+### 風格 Agent API（8090）
+
+把「翻譯 → 語體檢查 → 配音」包成一支服務，可接任何 OpenAI 相容 LLM：
+
+```bash
+agent\啟動AgentAPI.bat        # http://127.0.0.1:8090
+```
+
+LLM 設定在 `agent/llm-config.json`（`base_url`／`model`／`api_key`，已 gitignore）；也可用編輯器 Agent 列「設定」填寫。
 
 ## 角色語體
 
